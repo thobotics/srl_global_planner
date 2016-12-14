@@ -48,13 +48,13 @@ bool Grid_planner::initialize(){
 
     /// need to properly initialize goal and start
 
-    pub_discrete_path_ = nh_.advertise<nav_msgs::Path>("/move_base_node/Srl_global_planner/global_path", 1); // to publish the path that will be used as support in RRT
+    pub_discrete_path_ = nh_.advertise<nav_msgs::Path>("/move_base/Srl_global_planner/global_path", 1); // to publish the path that will be used as support in RRT
 
-    pub_discrete_path_marker_ = nh_.advertise<visualization_msgs::Marker>("/move_base_node/Srl_global_planner/global_path_marker_", 1); // to publish the path that will be used as support in RRT
+    pub_discrete_path_marker_ = nh_.advertise<visualization_msgs::Marker>("/move_base/Srl_global_planner/global_path_marker_", 1); // to publish the path that will be used as support in RRT
 
-    pub_grid_ = nh_.advertise<visualization_msgs::Marker>("/move_base_node/Srl_global_planner/grid_markers", 1); //
+    pub_grid_ = nh_.advertise<visualization_msgs::Marker>("/move_base/Srl_global_planner/grid_markers", 1); //
 
-    sub_obstacles_ = nh_.subscribe("/move_base_node/global_costmap/costmap",1, &Grid_planner::callbackreadingObstacles,this);
+    sub_obstacles_ = nh_.subscribe("/move_base/global_costmap/costmap",1, &Grid_planner::callbackreadingObstacles,this);
 
     /// define grid parameters
     nh_.getParam("minx", minx_);
@@ -84,7 +84,7 @@ bool Grid_planner::initialize(){
 
     nh_.getParam("planner_frame",planner_frame_);
 
-    nh_.getParam("move_base_node/PUBLISH_GRID", PUBLISH_GRID);
+    nh_.getParam("move_base/PUBLISH_GRID", PUBLISH_GRID);
 
 
     if(Fs_gridplanner_!=0)
@@ -451,7 +451,7 @@ bool Grid_planner::setGoal(double x,double y, double z, std::string goal_frame){
 
     ROS_DEBUG("Setting Goal (%f, %f), Goal Frame %s", x, y , goal_frame.c_str());
 
-    tf::StampedTransform transform;
+    /*tf::StampedTransform transform;
 
     try{
 
@@ -464,7 +464,7 @@ bool Grid_planner::setGoal(double x,double y, double z, std::string goal_frame){
 
         ROS_ERROR("Failed to transform Gaol Transform in Grid Planner");
         return false;
-    }
+    }*/
 
     tf::Pose source;
 
@@ -477,7 +477,8 @@ bool Grid_planner::setGoal(double x,double y, double z, std::string goal_frame){
     source.setBasis(base);
 
     /// Apply the proper transform
-    tf::Pose result = transform*source;
+    //tf::Pose result = transform*source;
+    tf::Pose result = source;
 
         /// Check if in obstacle
     unsigned int x_c, y_c;
@@ -521,7 +522,7 @@ bool Grid_planner::setStart(double x, double y, double theta, std::string start_
 
     tf::StampedTransform transform;
 
-    try{
+    /*try{
 
         // will transform data in the start_frame into the costmap_frame_
         gridlistener_->waitForTransform( costmap_frame_, start_frame, ros::Time::now(), ros::Duration(0.20));
@@ -532,7 +533,7 @@ bool Grid_planner::setStart(double x, double y, double theta, std::string start_
 
         ROS_ERROR("Failed to transform Gaol Transform in Grid Planner");
         return false;
-    }
+    }*/
 
     tf::Pose source;
 
@@ -545,7 +546,8 @@ bool Grid_planner::setStart(double x, double y, double theta, std::string start_
     source.setBasis(base);
 
     /// Apply the proper transform
-    tf::Pose result = transform*source;
+    //tf::Pose result = transform*source;
+    tf::Pose result = source;
 
     /// Check if in obstacle
 

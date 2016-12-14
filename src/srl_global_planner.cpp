@@ -32,20 +32,20 @@ geometry_msgs::PoseStamped Srl_global_planner::transformPose(geometry_msgs::Pose
 
     ROS_DEBUG("Transform Pose in RRT, in Frame %s", planner_frame_.c_str());
 
-    tf::StampedTransform transform;
+    //tf::StampedTransform transform;
 
-    try{
+    //try{
 
-        // will transform data in the goal_frame into the planner_frame_
-        listener->waitForTransform( planner_frame_, init_pose.header.frame_id, ros::Time::now(), ros::Duration(0.20));
-        listener->lookupTransform(  planner_frame_,  init_pose.header.frame_id, ros::Time::now(), transform);
+        //// will transform data in the goal_frame into the planner_frame_
+        //listener->waitForTransform( planner_frame_, init_pose.header.frame_id, ros::Time::now(), ros::Duration(0.20));
+        //listener->lookupTransform(  planner_frame_,  init_pose.header.frame_id, ros::Time::now(), transform);
 
-    }
-    catch(tf::TransformException){
+    //}
+    //catch(tf::TransformException){
 
-        ROS_ERROR("Failed to transform the given pose in the RRT Planner frame_id");
-        return init_pose;
-    }
+        //ROS_ERROR("Failed to transform the given pose in the RRT Planner frame_id");
+        //return init_pose;
+    //}
 
     tf::Pose source;
 
@@ -58,7 +58,8 @@ geometry_msgs::PoseStamped Srl_global_planner::transformPose(geometry_msgs::Pose
     source.setBasis(base);
 
     /// Apply the proper transform
-    tf::Pose result = transform*source;
+    //tf::Pose result = transform*source;
+    tf::Pose result = source;
 
 
 
@@ -85,21 +86,21 @@ void Srl_global_planner::setGoal(double x, double y, double theta, double toll, 
 
   ROS_DEBUG("Setting Goal in RRT, Goal Frame %s", goal_frame.c_str());
 
-    tf::StampedTransform transform;
+    //tf::StampedTransform transform;
 
-    try{
+    //try{
 
-        // will transform data in the goal_frame into the planner_frame_
-        listener->waitForTransform( planner_frame_, goal_frame, ros::Time::now(), ros::Duration(0.20));
+        //// will transform data in the goal_frame into the planner_frame_
+        //listener->waitForTransform( planner_frame_, goal_frame, ros::Time(0), ros::Duration(0.20));
 
-        listener->lookupTransform( planner_frame_, goal_frame, ros::Time::now(), transform);
+        //listener->lookupTransform( planner_frame_, goal_frame, ros::Time(0), transform);
 
-    }
-    catch(tf::TransformException){
+    //}
+    //catch(tf::TransformException){
 
-        ROS_ERROR("Failed to transform Gaol Transform in RRT Planner");
-        return;
-    }
+        //ROS_ERROR("Failed to transform Gaol Transform in RRT Planner");
+        //return;
+    //}
 
     tf::Pose source;
 
@@ -112,7 +113,8 @@ void Srl_global_planner::setGoal(double x, double y, double theta, double toll, 
     source.setBasis(base);
 
     /// Apply the proper transform
-    tf::Pose result = transform*source;
+    //tf::Pose result = transform*source;
+    tf::Pose result = source;
 
 
     this->goal_theta_= tf::getYaw( result.getRotation());
@@ -178,83 +180,82 @@ void Srl_global_planner::publishBlockedPlanner(bool status){
 
 void Srl_global_planner::publishTree(){
 
-    visualization_msgs::Marker tree_marker_;
+	visualization_msgs::Marker tree_marker_;
 
 
-    tree_marker_.header.frame_id = planner_frame_;
-    tree_marker_.header.stamp = ros::Time();
-    tree_marker_.ns = "rrt_planner";
-    tree_marker_.id = 1;
+	tree_marker_.header.frame_id = planner_frame_;
+	tree_marker_.header.stamp = ros::Time();
+	tree_marker_.ns = "rrt_planner";
+	tree_marker_.id = 1;
 
-    tree_marker_.type = visualization_msgs::Marker::POINTS;
-    tree_marker_.color.a = 1;
-    tree_marker_.color.r = 0.0;
-    tree_marker_.color.g = 0.0;
-    tree_marker_.color.b = 1.0;
+	tree_marker_.type = visualization_msgs::Marker::POINTS;
+	tree_marker_.color.a = 1;
+	tree_marker_.color.r = 0.0;
+	tree_marker_.color.g = 0.0;
+	tree_marker_.color.b = 1.0;
 
-    tree_marker_.scale.x = 0.1;
-    tree_marker_.scale.y = 0.1;
-    tree_marker_.scale.z = 0.1;
-
-
-    tree_marker_.action = 0;  // add or modify
+	tree_marker_.scale.x = 0.1;
+	tree_marker_.scale.y = 0.1;
+	tree_marker_.scale.z = 0.1;
 
 
-    for (vector<Tpoint>::const_iterator iter =this->tree_.begin(); iter !=this->tree_.end(); ++iter) {
-        Tpoint a = (*iter);
-        geometry_msgs::Point p;
-        p.x = a.x;
-        p.y = a.y;
-        p.z = 0.5;
-
-        tree_marker_.points.push_back(p);
-
-    }
+	tree_marker_.action = 0;  // add or modify
 
 
+	for (vector<Tpoint>::const_iterator iter =this->tree_.begin(); iter !=this->tree_.end(); ++iter) {
+		Tpoint a = (*iter);
+		geometry_msgs::Point p;
+		p.x = a.x;
+		p.y = a.y;
+		p.z = 0.5;
 
+		tree_marker_.points.push_back(p);
 
-    pub_tree_.publish(tree_marker_);
-
-
-    visualization_msgs::Marker dedicated_tree_marker_;
+	}
 
 
 
-    /// pub_tree_dedicated_ publishes a tree on a topic showed by a separate rviz session
 
-    dedicated_tree_marker_.header.frame_id = planner_frame_;
-    dedicated_tree_marker_.header.stamp = ros::Time();
-    dedicated_tree_marker_.ns = "rrt_planner";
-    dedicated_tree_marker_.id = 1;
-
-    dedicated_tree_marker_.type = visualization_msgs::Marker::POINTS;
-    dedicated_tree_marker_.color.a = 1;
-    dedicated_tree_marker_.color.r = 1.0;
-    dedicated_tree_marker_.color.g = 0.0;
-    dedicated_tree_marker_.color.b = 0.0;
-
-    dedicated_tree_marker_.scale.x = 0.1;
-    dedicated_tree_marker_.scale.y = 0.1;
-    dedicated_tree_marker_.scale.z = 0.1;
+	pub_tree_.publish(tree_marker_);
 
 
-    dedicated_tree_marker_.action = 0;  // add or modify
+	visualization_msgs::Marker dedicated_tree_marker_;
 
 
-    for (vector<Tpoint>::const_iterator iter =this->tree_.begin(); iter !=this->tree_.end(); ++iter) {
-        Tpoint a = (*iter);
-        geometry_msgs::Point p;
-        p.x = a.x;
-        p.y = a.y;
-        p.z = 0.05;
 
-        dedicated_tree_marker_.points.push_back(p);
+	/// pub_tree_dedicated_ publishes a tree on a topic showed by a separate rviz session
 
-    }
+	dedicated_tree_marker_.header.frame_id = planner_frame_;
+	dedicated_tree_marker_.header.stamp = ros::Time();
+	dedicated_tree_marker_.ns = "rrt_planner";
+	dedicated_tree_marker_.id = 1;
 
-    pub_tree_dedicated_.publish(dedicated_tree_marker_);
+	dedicated_tree_marker_.type = visualization_msgs::Marker::POINTS;
+	dedicated_tree_marker_.color.a = 1;
+	dedicated_tree_marker_.color.r = 1.0;
+	dedicated_tree_marker_.color.g = 0.0;
+	dedicated_tree_marker_.color.b = 0.0;
 
+	dedicated_tree_marker_.scale.x = 0.1;
+	dedicated_tree_marker_.scale.y = 0.1;
+	dedicated_tree_marker_.scale.z = 0.1;
+
+
+	dedicated_tree_marker_.action = 0;  // add or modify
+
+
+	for (vector<Tpoint>::const_iterator iter =this->tree_.begin(); iter !=this->tree_.end(); ++iter) {
+		Tpoint a = (*iter);
+		geometry_msgs::Point p;
+		p.x = a.x;
+		p.y = a.y;
+		p.z = 0.05;
+
+		dedicated_tree_marker_.points.push_back(p);
+
+	}
+
+	pub_tree_dedicated_.publish(dedicated_tree_marker_);
 
 }
 
@@ -271,13 +272,13 @@ void Srl_global_planner::publishSample(double x,double y, double theta, int iden
     sample_marker_.id = ident;
 
 
-    sample_marker_.type = visualization_msgs::Marker::ARROW;
+    sample_marker_.type = visualization_msgs::Marker::CUBE;
     sample_marker_.color.a = 1;
     sample_marker_.color.r = 1.0;
     sample_marker_.color.g = 0.10;
     sample_marker_.color.b = 0.10;
 
-    sample_marker_.scale.x = 1;
+    sample_marker_.scale.x = 0.1;
     sample_marker_.scale.y = 0.1;
     sample_marker_.scale.z = 0.01;
 
@@ -975,7 +976,7 @@ double Srl_global_planner::set_angle_to_range(double alpha, double min)
 
 int Srl_global_planner::plan(Trajectory *traj,int type, geometry_msgs::PoseStamped& start){
     // TODO: could use dyn param
-    nh_.getParam("/move_base_node/planner_frequency", this->planner_frequency_);
+    nh_.getParam("/move_base/planner_frequency", this->planner_frequency_);
 
     if(DEB_RRT>0)
     ROS_DEBUG("Startin to plan!!!");
@@ -1473,8 +1474,10 @@ else {
 
 
 
-    if(!NOANIM)
+    if(!NOANIM){
+    	saveTree(list_vertices);
         publishTree();
+    }
 
     return 1;
 
@@ -2349,7 +2352,7 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
         ros::NodeHandle node("~/Srl_global_planner");
         nh_ =  node;
 
-        ROS_DEBUG("Srl_global_planner ŝtart initializing");
+        ROS_DEBUG("Srl_global_planner start initializing");
 
 
         try {
@@ -2363,7 +2366,9 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
         /// TODO: !! getting the transform listener from costmap2DROS... only in our spencer software
         ROS_INFO("getting listner from costmap...");
 
-        listener = costmap_ros_->getTransformListener();
+        tf::TransformListener tf(ros::Duration(10));
+		listener = &tf;
+		//listener = costmap_ros_->getTransformListener();
 
         ROS_INFO("creating world model...");
         world_model_ = new CostmapModel(*costmap_);
@@ -2544,7 +2549,7 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
         nh_.getParam("global_costmap_width", this->global_costmap_width_);
         nh_.getParam("global_costmap_height", this->global_costmap_height_);
         nh_.getParam("length_path_optimize", this->length_path_optimize_);
-        nh_.getParam("/move_base_node/planner_frequency", this->planner_frequency_);
+        nh_.getParam("/move_base/planner_frequency", this->planner_frequency_);
 
         ROS_INFO("Is Check on costmap Layers ON? %d", this->CHECK_LAYERS_ON_ );
         /// store dim of scene

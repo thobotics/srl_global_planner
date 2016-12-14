@@ -78,7 +78,7 @@ int smp::minimum_time_reachability<typeparams,NUM_DIMENSIONS>
 
   rob_foot_print_ = costmap_ros_->getRobotFootprint();
 
-  try{
+  /*try{
 
       ROS_DEBUG("Getting Transform from %s to %s", planner_frame.c_str(), global_frame_.c_str() );
 
@@ -89,7 +89,7 @@ int smp::minimum_time_reachability<typeparams,NUM_DIMENSIONS>
 
         ROS_ERROR("Failed to receive transform from CostMap");
         return 0;
-  }
+  }*/
 
 
   return 1;
@@ -112,7 +112,8 @@ int smp::minimum_time_reachability<typeparams,NUM_DIMENSIONS>
     source.setBasis(base);
 
     /// Apply the proper transform
-    tf::Pose result=transform_*source;
+    //tf::Pose result=transform_*source;
+    tf::Pose result=source;
 
     double x_bot = result.getOrigin().x();
     double y_bot = result.getOrigin().y();
