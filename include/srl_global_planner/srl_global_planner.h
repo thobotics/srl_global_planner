@@ -270,6 +270,7 @@ private:
     ros::Publisher pub_graph_;
     ros::Publisher pub_no_plan_;
     ros::Publisher pub_obstacle_markers_;
+    ros::Publisher pub_funnel_;
 
     // ros::Publisher pub_sensor_range_;
     // subscribers
@@ -277,6 +278,7 @@ private:
     ros::Subscriber sub_all_agents_;   // to read the agents' poses AND   to read the current robot pose
     ros::Subscriber sub_goal_;
     ros::Subscriber sub_daryl_odom_;
+    ros::Subscriber sub_potential_map_;
     ros::Subscriber frontLaserCollisionStatus_listener_;
     ros::Subscriber rearLaserCollisionStatus_listener_;
 
@@ -791,6 +793,16 @@ public:
     double length_path_optimize_ ;
 
     double planner_frequency_;
+
+    // NEW Edit from thobotics
+    /**
+	* @brief callbackSetGoal, Set goal via the Rviz Topic
+	* @return void
+	*/
+    boost::mutex potmap_mutex_;
+    nav_msgs::OccupancyGrid potential_map_;
+    int last_funnel_size_;
+	void callbackSetPotentialMap(const nav_msgs::OccupancyGrid::ConstPtr& msg);
 
 };
 

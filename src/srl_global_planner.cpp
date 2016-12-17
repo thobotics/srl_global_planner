@@ -272,13 +272,13 @@ void Srl_global_planner::publishSample(double x,double y, double theta, int iden
     sample_marker_.id = ident;
 
 
-    sample_marker_.type = visualization_msgs::Marker::CUBE;
+    sample_marker_.type = visualization_msgs::Marker::ARROW;
     sample_marker_.color.a = 1;
     sample_marker_.color.r = 1.0;
     sample_marker_.color.g = 0.10;
     sample_marker_.color.b = 0.10;
 
-    sample_marker_.scale.x = 0.1;
+    sample_marker_.scale.x = 0.5;
     sample_marker_.scale.y = 0.1;
     sample_marker_.scale.z = 0.01;
 
@@ -731,6 +731,26 @@ void Srl_global_planner::callbackAllTracks(const spencer_tracking_msgs::TrackedP
 
 
 
+
+}
+
+
+/// ==================================================================================
+/// callbackSetPotentialMap
+/// ==================================================================================
+void Srl_global_planner::callbackSetPotentialMap(const nav_msgs::OccupancyGrid::ConstPtr& msg){
+	{
+		boost::mutex::scoped_lock lock(potmap_mutex_);
+		potential_map_.header.frame_id = msg->header.frame_id;
+		potential_map_.header.stamp = msg->header.stamp;
+		potential_map_.info.width = msg->info.width;
+		potential_map_.info.height = msg->info.height;
+		potential_map_.info.origin.position.x = msg->info.origin.position.x;
+		potential_map_.info.origin.position.y = msg->info.origin.position.y;
+		potential_map_.info.origin.position.z = msg->info.origin.position.z;
+		potential_map_.info.resolution = msg->info.resolution;
+		potential_map_.data = msg->data;
+	}
 
 }
 
@@ -1310,6 +1330,7 @@ if(DEB_RRT>0)
 
                 first_sol++;
              }
+            break;
 
 
             }
@@ -1400,16 +1421,16 @@ else {
     if( trajectory_final.list_states.size()==0){
         typedef rrtstar_t planner_t;
 
-    if(!NOANIM)
-        publishTree();
-
-
         planner_t *planner_int;
         planner_int =&planner;
         list <vertex_t *> *list_vertices = &(planner_int->list_vertices);
         /// Metrics (timeIter_ saved before)
         numVertices_=list_vertices->size();
         timeSolution_=end_time_solution;
+        if(!NOANIM){
+            	saveTree(list_vertices);
+                publishTree();
+        }
         return 0;
 
     }
@@ -1472,12 +1493,132 @@ else {
     numVertices_=list_vertices->size();
     timeSolution_=end_time_solution;
 
-
-
     if(!NOANIM){
-    	saveTree(list_vertices);
-        publishTree();
+		saveTree(list_vertices);
+		publishTree();
+	}
+
+    // ========================== NEW =============================
+	list <vertex_t *> vertices_on_planned;
+    // Note: Last vertex also a goal
+    vertex_t *vertex_ptr = list_vertices->back();
+    while (1) {
+
+		edge_t *edge_curr = vertex_ptr->incoming_edges.back();
+
+		vertices_on_planned.push_back(vertex_ptr);
+
+		/*state_t *state = vertex_ptr->state;
+		geometry_msgs::Point p;
+		p.x = state->state_vars[0];
+		p.y = state->state_vars[1];
+		p.z = 0.5;
+
+		vertex_marker.points.push_back(p);*/
+
+		if (vertex_ptr->incoming_edges.size() == 0)
+		  break;
+
+		vertex_ptr = edge_curr->vertex_src;
     }
+    //pub_plan_vertex_.publish(vertex_marker);
+
+    int funnelCount = 0;
+    visualization_msgs::MarkerArray funnelArray;
+	{
+		boost::mutex::scoped_lock lock(potmap_mutex_);
+		if(potential_map_.data.size() > 0){
+			int w = potential_map_.info.width;
+			int h = potential_map_.info.height;
+			double res = potential_map_.info.resolution;
+
+			// Set only optimal planned vertices
+			distance_evaluator.set_list_vertices(&vertices_on_planned);
+			distance_evaluator.reconstruct_kdtree_from_vertex_list();
+
+			for (unsigned int i = 0 ; i < h; ++i)
+			{
+				for(unsigned int j = 0; j < w; ++j)
+				{
+					if (potential_map_.data[i*w+j] > -1) {
+						state_t state;
+						state.state_vars[0] = (j * res) + potential_map_.info.origin.position.x + (res/2.0);
+						state.state_vars[1] = (i * res) + potential_map_.info.origin.position.y + (res/2.0);
+						state.state_vars[2] = 0;
+
+						if(collision_checker.check_collision_state(&state) != 0){
+							vertex_t *vertex_nearest;
+							distance_evaluator.find_nearest_vertex(&state, (void **)&vertex_nearest);
+
+							int exact_connection = -1;
+							trajectory_t *trajectory = new trajectory_t;
+							list<state_t*> *intermediate_vertices = new list<state_t*>;
+
+							extender.dt_=0.1;
+							extender.rho_endcondition=RHO;
+							extender.phi_endcondition = 20*M_PI/180;
+
+							if (extender.extend (vertex_nearest->state, &state,
+								   &exact_connection, trajectory, intermediate_vertices) == 1) {
+
+								// If the trajectory is collision free
+								trajectory->list_states.push_front (vertex_nearest->state);
+								int collision_check = collision_checker.check_collision_trajectory (trajectory);
+								trajectory->list_states.pop_front ();
+							    if (collision_check == 1) {
+							    	// Publish trajectory from that
+							    	// Publish vertex belong to optimal path
+									visualization_msgs::Marker traj_marker;
+
+									traj_marker.header.frame_id = planner_frame_;
+									traj_marker.header.stamp = ros::Time();
+									traj_marker.ns = "rrt_planner";
+									traj_marker.id = funnelCount;
+
+									traj_marker.type = visualization_msgs::Marker::LINE_STRIP;
+									traj_marker.color.a = 1;
+									traj_marker.color.r = 1.0;
+									traj_marker.color.g = 0.60;
+									traj_marker.color.b = 0.10;
+
+									traj_marker.scale.x = 0.01;
+									//traj_marker.action = visualization_msgs::Marker::MODIFY;  // add or modify
+
+							    	for (typename list<state_t*>::iterator it_state = trajectory->list_states.begin();
+										it_state != trajectory->list_states.end(); it_state++){
+										state_t *state_curr = *it_state;
+
+										geometry_msgs::Point p;
+										p.x = state_curr->state_vars[0];
+										p.y = state_curr->state_vars[1];
+										p.z = 0.7;
+										traj_marker.points.push_back(p);
+									}
+
+							    	funnelArray.markers.push_back(traj_marker);
+							    	funnelCount++;
+
+							    }
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if(last_funnel_size_ > funnelCount){
+		for(int i = funnelCount; i < last_funnel_size_; i++){
+			visualization_msgs::Marker traj_marker;
+			traj_marker.header.frame_id = planner_frame_;
+			traj_marker.header.stamp = ros::Time();
+			traj_marker.ns = "rrt_planner";
+			traj_marker.id = i;
+			traj_marker.action = visualization_msgs::Marker::DELETE;
+			funnelArray.markers.push_back(traj_marker);
+		}
+	}
+	last_funnel_size_ = funnelCount;
+	pub_funnel_.publish(funnelArray);
 
     return 1;
 
@@ -2366,8 +2507,8 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
         /// TODO: !! getting the transform listener from costmap2DROS... only in our spencer software
         ROS_INFO("getting listner from costmap...");
 
-        tf::TransformListener tf(ros::Duration(10));
-		listener = &tf;
+        //tf::TransformListener tf(ros::Duration(10));
+		//listener = &tf;
 		//listener = costmap_ros_->getTransformListener();
 
         ROS_INFO("creating world model...");
@@ -2427,6 +2568,8 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
 
         pub_tree_ = nh_.advertise<visualization_msgs::Marker>("rrt_planner_tree",1000);
 
+        pub_funnel_ = nh_.advertise<visualization_msgs::MarkerArray>("rrt_planner_funnel",1000);
+
         pub_tree_dedicated_ = nh_.advertise<visualization_msgs::Marker>("rrt_planner_tree_dedicated",1000);
 
         pub_path_dedicated_ = nh_.advertise<visualization_msgs::Marker>("rrt_planner_path_dedicated",1000);
@@ -2435,6 +2578,9 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
 
         // pub_graph_=nh_.advertise<pedsim_msgs::Tree>("/rrt_planner/graph",1);
         pub_no_plan_ = nh_.advertise<std_msgs::Bool>("rrt_planner/no_plan",1);
+
+        sub_potential_map_ = nh_.subscribe("/move_base/GlobalPlanner/potential",1, &Srl_global_planner::callbackSetPotentialMap,this);
+
 
         // sub_obstacles_= nh_.subscribe("/move_base_node/global_costmap/costmap",1, &Srl_global_planner::callbackObstacles,this);
 

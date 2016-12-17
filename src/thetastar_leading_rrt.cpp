@@ -120,7 +120,7 @@ bool Grid_planner::initialize(){
 
 
     // navfn.initialize("navfnPlanner", costmap_ros_);
-    globalPlannerNav.initialize("globlalPlannerNav", costmap_ros_);
+    globalPlannerNav.initialize("GlobalPlanner", costmap_ros_);
 }
 
 
