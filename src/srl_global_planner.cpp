@@ -1524,6 +1524,9 @@ else {
 		planned_extender_ = extender;
 		planned_min_time_reachability_ = min_time_reachability;
 
+		planned_distance_evaluator_.set_list_vertices(&planned_vertices_); // Set only optimal planned vertices
+		planned_distance_evaluator_.reconstruct_kdtree_from_vertex_list();
+
 		if(potential_map_.data.size() > 0){
 			int w = potential_map_.info.width;
 			int h = potential_map_.info.height;
