@@ -800,7 +800,15 @@ public:
 	* @return void
 	*/
     boost::mutex potmap_mutex_;
+    boost::condition_variable potmap_cond_;
+    bool run_potmap_;
     nav_msgs::OccupancyGrid potential_map_;
+
+    list <vertex_t *> planned_vertices_;
+    distance_evaluator_t planned_distance_evaluator_;
+    collision_checker_t planned_collision_checker_;
+    extender_t planned_extender_;
+    min_time_reachability_t planned_min_time_reachability_;
     int last_funnel_size_;
 	void callbackSetPotentialMap(const nav_msgs::OccupancyGrid::ConstPtr& msg);
 

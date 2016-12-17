@@ -751,7 +751,6 @@ void Srl_global_planner::callbackSetPotentialMap(const nav_msgs::OccupancyGrid::
 		potential_map_.info.resolution = msg->info.resolution;
 		potential_map_.data = msg->data;
 	}
-
 }
 
 
@@ -1498,43 +1497,37 @@ else {
 		publishTree();
 	}
 
-    // ========================== NEW =============================
-	list <vertex_t *> vertices_on_planned;
-    // Note: Last vertex also a goal
-    vertex_t *vertex_ptr = list_vertices->back();
-    while (1) {
+
+    list <vertex_t *> vertices_on_planned;
+	// Note: Last vertex also a goal
+	vertex_t *vertex_ptr = list_vertices->back();
+	while (1) {
 
 		edge_t *edge_curr = vertex_ptr->incoming_edges.back();
 
 		vertices_on_planned.push_back(vertex_ptr);
 
-		/*state_t *state = vertex_ptr->state;
-		geometry_msgs::Point p;
-		p.x = state->state_vars[0];
-		p.y = state->state_vars[1];
-		p.z = 0.5;
-
-		vertex_marker.points.push_back(p);*/
-
 		if (vertex_ptr->incoming_edges.size() == 0)
 		  break;
 
 		vertex_ptr = edge_curr->vertex_src;
-    }
-    //pub_plan_vertex_.publish(vertex_marker);
+	}
 
-    int funnelCount = 0;
-    visualization_msgs::MarkerArray funnelArray;
-	{
-		boost::mutex::scoped_lock lock(potmap_mutex_);
+    // ========================== FUNNEL =============================
+	int funnelCount = 0;
+	visualization_msgs::MarkerArray funnelArray;
+    {
+    	boost::mutex::scoped_lock lock(potmap_mutex_);
+		planned_vertices_ = vertices_on_planned;
+		planned_distance_evaluator_ = distance_evaluator;
+		planned_collision_checker_ = collision_checker;
+		planned_extender_ = extender;
+		planned_min_time_reachability_ = min_time_reachability;
+
 		if(potential_map_.data.size() > 0){
 			int w = potential_map_.info.width;
 			int h = potential_map_.info.height;
 			double res = potential_map_.info.resolution;
-
-			// Set only optimal planned vertices
-			distance_evaluator.set_list_vertices(&vertices_on_planned);
-			distance_evaluator.reconstruct_kdtree_from_vertex_list();
 
 			for (unsigned int i = 0 ; i < h; ++i)
 			{
@@ -1546,64 +1539,103 @@ else {
 						state.state_vars[1] = (i * res) + potential_map_.info.origin.position.y + (res/2.0);
 						state.state_vars[2] = 0;
 
-						if(collision_checker.check_collision_state(&state) != 0){
-							vertex_t *vertex_nearest;
-							distance_evaluator.find_nearest_vertex(&state, (void **)&vertex_nearest);
+						if(planned_collision_checker_.check_collision_state(&state) != 0){
+							// =========== FIND FUNNEL FROM STATE TO ATTRACTED VERTEX ===========
 
-							int exact_connection = -1;
-							trajectory_t *trajectory = new trajectory_t;
-							list<state_t*> *intermediate_vertices = new list<state_t*>;
+							// Variable for finding minimum cost vertex
+							vertex_t *vertex_min = new vertex_t;
+							trajectory_t *trajectory_min = new trajectory_t;
+							list<state_t*> *intermediate_vertices_min = new list<state_t*>;
 
-							extender.dt_=0.1;
-							extender.rho_endcondition=RHO;
-							extender.phi_endcondition = 20*M_PI/180;
+							double cost_trajectory_from_state;
+							double cost_min = -1;
 
-							if (extender.extend (vertex_nearest->state, &state,
-								   &exact_connection, trajectory, intermediate_vertices) == 1) {
+							/*list<void*> list_vertices_in_ball;
+							distance_evaluator.find_near_vertices_k (&state, 2, &list_vertices_in_ball);
 
-								// If the trajectory is collision free
-								trajectory->list_states.push_front (vertex_nearest->state);
-								int collision_check = collision_checker.check_collision_trajectory (trajectory);
-								trajectory->list_states.pop_front ();
-							    if (collision_check == 1) {
-							    	// Publish trajectory from that
-							    	// Publish vertex belong to optimal path
-									visualization_msgs::Marker traj_marker;
+							ROS_INFO("k-Near: %d", (int)list_vertices_in_ball.size());*/
 
-									traj_marker.header.frame_id = planner_frame_;
-									traj_marker.header.stamp = ros::Time();
-									traj_marker.ns = "rrt_planner";
-									traj_marker.id = funnelCount;
+							/*for (typename list<vertex_t*>::iterator iter = vertices_on_planned.begin();
+									iter != vertices_on_planned.end(); iter++) {*/
 
-									traj_marker.type = visualization_msgs::Marker::LINE_STRIP;
-									traj_marker.color.a = 1;
-									traj_marker.color.r = 1.0;
-									traj_marker.color.g = 0.60;
-									traj_marker.color.b = 0.10;
+								//vertex_t *vertex_curr = (vertex_t*)(*iter);
+								vertex_t *vertex_curr;
+								planned_distance_evaluator_.find_nearest_vertex(&state, (void **)&vertex_curr);
 
-									traj_marker.scale.x = 0.01;
-									//traj_marker.action = visualization_msgs::Marker::MODIFY;  // add or modify
+								trajectory_t  *trajectory_curr = new trajectory_t;
+								list<state_t*> *intermediate_vertices_curr = new list<state_t*>;
+								int exact_connection = -1;
+								planned_extender_.dt_=0.1;
+								planned_extender_.rho_endcondition = RHO;
+								planned_extender_.phi_endcondition = 20*M_PI/180;
 
-							    	for (typename list<state_t*>::iterator it_state = trajectory->list_states.begin();
-										it_state != trajectory->list_states.end(); it_state++){
-										state_t *state_curr = *it_state;
+								if (planned_extender_.extend (&state, vertex_curr->state,
+										&exact_connection, trajectory_curr, intermediate_vertices_curr) == 1) {
 
-										geometry_msgs::Point p;
-										p.x = state_curr->state_vars[0];
-										p.y = state_curr->state_vars[1];
-										p.z = 0.7;
-										traj_marker.points.push_back(p);
-									}
+									trajectory_curr->list_states.push_front (&state);
+									int collision_check = planned_collision_checker_.check_collision_trajectory (trajectory_curr);
+									trajectory_curr->list_states.pop_front ();
 
-							    	funnelArray.markers.push_back(traj_marker);
-							    	funnelCount++;
+									if (collision_check == 1) {
 
-							    }
+										// Calculate the cost to get to the extended state with the new trajectory
+										double cost_trajectory_from_curr = planned_min_time_reachability_.evaluate_cost_trajectory (&state, trajectory_curr);
+										double cost_curr = vertex_curr->data.total_cost + cost_trajectory_from_curr;
+
+										// Check whether the total cost through the new vertex is less than the parent
+										if (cost_min < 0 || cost_curr < cost_min) {
+											vertex_min = vertex_curr;
+											trajectory_min = trajectory_curr;
+											intermediate_vertices_min = intermediate_vertices_curr;
+
+											cost_trajectory_from_state = cost_trajectory_from_curr;
+											cost_min = cost_curr;
+										 }
+									 }
+								 }
+							//}
+
+
+							// Check state is feasible
+							if(cost_min > -1) {
+								// Publish trajectory from that
+								visualization_msgs::Marker traj_marker;
+
+								traj_marker.header.frame_id = planner_frame_;
+								traj_marker.header.stamp = ros::Time();
+								traj_marker.ns = "rrt_planner";
+								traj_marker.id = funnelCount;
+
+								traj_marker.type = visualization_msgs::Marker::LINE_STRIP;
+								traj_marker.color.a = 1;
+								traj_marker.color.r = 1.0;
+								traj_marker.color.g = 0.60;
+								traj_marker.color.b = 0.10;
+
+								traj_marker.scale.x = 0.01;
+								//traj_marker.action = visualization_msgs::Marker::MODIFY;  // add or modify
+
+								for (typename list<state_t*>::iterator it_state = trajectory_min->list_states.begin();
+									it_state != trajectory_min->list_states.end(); it_state++){
+									state_t *state_curr = *it_state;
+
+									geometry_msgs::Point p;
+									p.x = state_curr->state_vars[0];
+									p.y = state_curr->state_vars[1];
+									p.z = 0.7;
+									traj_marker.points.push_back(p);
+								}
+
+								funnelArray.markers.push_back(traj_marker);
+								funnelCount++;
 							}
-						}
-					}
-				}
-			}
+
+
+							// ============ END ===========
+						} // End check state collision
+					} // End POT_HIGH region
+				} // End loop column
+			} // End loop row
 		}
 	}
 	if(last_funnel_size_ > funnelCount){
@@ -1619,6 +1651,8 @@ else {
 	}
 	last_funnel_size_ = funnelCount;
 	pub_funnel_.publish(funnelArray);
+
+
 
     return 1;
 
