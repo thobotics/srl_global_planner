@@ -271,6 +271,7 @@ private:
     ros::Publisher pub_no_plan_;
     ros::Publisher pub_obstacle_markers_;
     ros::Publisher pub_funnel_;
+    ros::Publisher pub_collisionfree_;
 
     // ros::Publisher pub_sensor_range_;
     // subscribers

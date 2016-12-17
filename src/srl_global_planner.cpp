@@ -1515,6 +1515,7 @@ else {
 
     // ========================== FUNNEL =============================
 	int funnelCount = 0;
+	nav_msgs::OccupancyGrid potMapFree;
 	visualization_msgs::MarkerArray funnelArray;
     {
     	boost::mutex::scoped_lock lock(potmap_mutex_);
@@ -1531,6 +1532,15 @@ else {
 			int w = potential_map_.info.width;
 			int h = potential_map_.info.height;
 			double res = potential_map_.info.resolution;
+
+			potMapFree.header.frame_id = potential_map_.header.frame_id;
+			potMapFree.header.stamp = ros::Time::now();
+			potMapFree.info.width = w;
+			potMapFree.info.height = h;
+			potMapFree.info.resolution = res;
+			potMapFree.info.origin.position.x = potential_map_.info.origin.position.x;
+			potMapFree.info.origin.position.y = potential_map_.info.origin.position.y;
+			potMapFree.data.resize(w*h);
 
 			for (unsigned int i = 0 ; i < h; ++i)
 			{
@@ -1558,12 +1568,12 @@ else {
 
 							ROS_INFO("k-Near: %d", (int)list_vertices_in_ball.size());*/
 
-							/*for (typename list<vertex_t*>::iterator iter = vertices_on_planned.begin();
-									iter != vertices_on_planned.end(); iter++) {*/
+							for (typename list<vertex_t*>::iterator iter = vertices_on_planned.begin();
+									iter != vertices_on_planned.end(); iter++) {
 
-								//vertex_t *vertex_curr = (vertex_t*)(*iter);
-								vertex_t *vertex_curr;
-								planned_distance_evaluator_.find_nearest_vertex(&state, (void **)&vertex_curr);
+								vertex_t *vertex_curr = (vertex_t*)(*iter);
+								/*vertex_t *vertex_curr;
+								planned_distance_evaluator_.find_nearest_vertex(&state, (void **)&vertex_curr);*/
 
 								trajectory_t  *trajectory_curr = new trajectory_t;
 								list<state_t*> *intermediate_vertices_curr = new list<state_t*>;
@@ -1588,15 +1598,26 @@ else {
 										// Check whether the total cost through the new vertex is less than the parent
 										if (cost_min < 0 || cost_curr < cost_min) {
 											vertex_min = vertex_curr;
-											trajectory_min = trajectory_curr;
-											intermediate_vertices_min = intermediate_vertices_curr;
+											trajectory_t *trajectory_tmp = trajectory_min; // Swap trajectory_parent and trajectory_curr
+											trajectory_min = trajectory_curr;              //   to properly free the memory later
+										    trajectory_curr = trajectory_tmp;
+
+										    list<state_t*> *intermediate_vertices_tmp = intermediate_vertices_min;  // Swap the intermediate vertices
+										    intermediate_vertices_min = intermediate_vertices_curr;                   //   to properly free the memory later
+										    intermediate_vertices_curr = intermediate_vertices_tmp;
 
 											cost_trajectory_from_state = cost_trajectory_from_curr;
 											cost_min = cost_curr;
 										 }
+
+										 // Show only collision free point
+										 potMapFree.data[i*w+j] = potential_map_.data[i*w+j];
 									 }
 								 }
-							//}
+
+								delete trajectory_curr;
+								delete intermediate_vertices_curr;
+							}
 
 
 							// Check state is feasible
@@ -1654,6 +1675,7 @@ else {
 	}
 	last_funnel_size_ = funnelCount;
 	pub_funnel_.publish(funnelArray);
+	pub_collisionfree_.publish(potMapFree);
 
 
 
@@ -2606,6 +2628,8 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
         pub_tree_ = nh_.advertise<visualization_msgs::Marker>("rrt_planner_tree",1000);
 
         pub_funnel_ = nh_.advertise<visualization_msgs::MarkerArray>("rrt_planner_funnel",1000);
+
+        pub_collisionfree_ = nh_.advertise<nav_msgs::OccupancyGrid>("rrt_potential_collision_free",1);
 
         pub_tree_dedicated_ = nh_.advertise<visualization_msgs::Marker>("rrt_planner_tree_dedicated",1000);
 
