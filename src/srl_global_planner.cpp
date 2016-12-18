@@ -1499,6 +1499,10 @@ else {
 
 
     list <vertex_t *> vertices_on_planned;
+
+    // Radius expand for find near vertices each state
+    // This the maximum distance between each vertex
+    double radius_expand = 0.0;
 	// Note: Last vertex also a goal
 	vertex_t *vertex_ptr = list_vertices->back();
 	while (1) {
@@ -1508,10 +1512,22 @@ else {
 		vertices_on_planned.push_back(vertex_ptr);
 
 		if (vertex_ptr->incoming_edges.size() == 0)
-		  break;
+			break;
+
+		// Compute Euclidean distance
+		double x2 = vertex_ptr->state->state_vars[0];
+		double y2 = vertex_ptr->state->state_vars[1];
+		double x1 = edge_curr->vertex_src->state->state_vars[0];
+		double y1 = edge_curr->vertex_src->state->state_vars[1];
+		double dist = sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
+		if(dist > radius_expand)
+			radius_expand = dist;
 
 		vertex_ptr = edge_curr->vertex_src;
 	}
+
+	radius_expand += 0.5; // add tolerance
+	ROS_INFO("Radius last: %f", radius_expand);
 
     // ========================== FUNNEL =============================
 	int funnelCount = 0;
@@ -1527,6 +1543,7 @@ else {
 
 		planned_distance_evaluator_.set_list_vertices(&planned_vertices_); // Set only optimal planned vertices
 		planned_distance_evaluator_.reconstruct_kdtree_from_vertex_list();
+
 
 		if(potential_map_.data.size() > 0){
 			int w = potential_map_.info.width;
@@ -1561,19 +1578,19 @@ else {
 							list<state_t*> *intermediate_vertices_min = new list<state_t*>;
 
 							double cost_trajectory_from_state;
-							double cost_min = -1;
+							double cost = -1;
+							bool found_path = false;
 
-							/*list<void*> list_vertices_in_ball;
-							distance_evaluator.find_near_vertices_k (&state, 2, &list_vertices_in_ball);
+							list<void*> list_vertices_in_ball;
+							distance_evaluator.find_near_vertices_r (&state, radius_expand, &list_vertices_in_ball);
 
-							ROS_INFO("k-Near: %d", (int)list_vertices_in_ball.size());*/
-
-							for (typename list<vertex_t*>::iterator iter = vertices_on_planned.begin();
-									iter != vertices_on_planned.end(); iter++) {
-
+							// NOTE: Find minimum cost from state to all vertices is good. But it very slow.
+							// NEW : Find the vertex that has collision free path (prefer vertex that nearer to goal).
+							// 		 Vertices is sort reversed by cost from high to low (goal to start)
+							// 		 Run the iterator until the path from state -> vertices is collision free
+							for (typename list<void*>::reverse_iterator iter = list_vertices_in_ball.rbegin();
+									iter != list_vertices_in_ball.rend(); ++iter) {
 								vertex_t *vertex_curr = (vertex_t*)(*iter);
-								/*vertex_t *vertex_curr;
-								planned_distance_evaluator_.find_nearest_vertex(&state, (void **)&vertex_curr);*/
 
 								trajectory_t  *trajectory_curr = new trajectory_t;
 								list<state_t*> *intermediate_vertices_curr = new list<state_t*>;
@@ -1596,32 +1613,34 @@ else {
 										double cost_curr = vertex_curr->data.total_cost + cost_trajectory_from_curr;
 
 										// Check whether the total cost through the new vertex is less than the parent
-										if (cost_min < 0 || cost_curr < cost_min) {
-											vertex_min = vertex_curr;
-											trajectory_t *trajectory_tmp = trajectory_min; // Swap trajectory_parent and trajectory_curr
-											trajectory_min = trajectory_curr;              //   to properly free the memory later
-										    trajectory_curr = trajectory_tmp;
+										vertex_min = vertex_curr;
+										trajectory_t *trajectory_tmp = trajectory_min; // Swap trajectory_parent and trajectory_curr
+										trajectory_min = trajectory_curr;              //   to properly free the memory later
+										trajectory_curr = trajectory_tmp;
 
-										    list<state_t*> *intermediate_vertices_tmp = intermediate_vertices_min;  // Swap the intermediate vertices
-										    intermediate_vertices_min = intermediate_vertices_curr;                   //   to properly free the memory later
-										    intermediate_vertices_curr = intermediate_vertices_tmp;
+										list<state_t*> *intermediate_vertices_tmp = intermediate_vertices_min;  // Swap the intermediate vertices
+										intermediate_vertices_min = intermediate_vertices_curr;                   //   to properly free the memory later
+										intermediate_vertices_curr = intermediate_vertices_tmp;
 
-											cost_trajectory_from_state = cost_trajectory_from_curr;
-											cost_min = cost_curr;
-										 }
+										cost_trajectory_from_state = cost_trajectory_from_curr;
+										cost = cost_curr;
 
-										 // Show only collision free point
-										 potMapFree.data[i*w+j] = potential_map_.data[i*w+j];
+										found_path = true;
 									 }
 								 }
 
 								delete trajectory_curr;
 								delete intermediate_vertices_curr;
+								if(found_path) break;
 							}
 
 
 							// Check state is feasible
-							if(cost_min > -1) {
+							if(cost > -1) {
+								 // Show only collision free point
+								potMapFree.data[i*w+j] = 100;// potential_map_.data[i*w+j];
+
+
 								// Publish trajectory from that
 								visualization_msgs::Marker traj_marker;
 
@@ -2640,6 +2659,7 @@ void  Srl_global_planner::initialize(std::string name, costmap_2d::Costmap2DROS*
         // pub_graph_=nh_.advertise<pedsim_msgs::Tree>("/rrt_planner/graph",1);
         pub_no_plan_ = nh_.advertise<std_msgs::Bool>("rrt_planner/no_plan",1);
 
+        // move_base/GlobalPlanner/potential
         sub_potential_map_ = nh_.subscribe("/move_base/GlobalPlanner/potential",1, &Srl_global_planner::callbackSetPotentialMap,this);
 
 
