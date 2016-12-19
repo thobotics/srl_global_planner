@@ -1544,6 +1544,8 @@ else {
 		planned_distance_evaluator_.set_list_vertices(&planned_vertices_); // Set only optimal planned vertices
 		planned_distance_evaluator_.reconstruct_kdtree_from_vertex_list();
 
+		vertex_t *vertex_goal = list_vertices->back();
+		double cost_goal = vertex_goal->data.total_cost;
 
 		if(potential_map_.data.size() > 0){
 			int w = potential_map_.info.width;
@@ -1559,10 +1561,15 @@ else {
 			potMapFree.info.origin.position.y = potential_map_.info.origin.position.y;
 			potMapFree.data.resize(w*h);
 
+			double max_cost = 0; // Use for scale potential map
+			std::vector<double> nav_cost(w*h);
+
 			for (unsigned int i = 0 ; i < h; ++i)
 			{
 				for(unsigned int j = 0; j < w; ++j)
 				{
+					nav_cost[i*w+j] = -1; // undiscovered space
+
 					if (potential_map_.data[i*w+j] > -1) {
 						state_t state;
 						state.state_vars[0] = (j * res) + potential_map_.info.origin.position.x + (res/2.0);
@@ -1577,7 +1584,6 @@ else {
 							trajectory_t *trajectory_min = new trajectory_t;
 							list<state_t*> *intermediate_vertices_min = new list<state_t*>;
 
-							double cost_trajectory_from_state;
 							double cost = -1;
 							bool found_path = false;
 
@@ -1609,8 +1615,7 @@ else {
 									if (collision_check == 1) {
 
 										// Calculate the cost to get to the extended state with the new trajectory
-										double cost_trajectory_from_curr = planned_min_time_reachability_.evaluate_cost_trajectory (&state, trajectory_curr);
-										double cost_curr = vertex_curr->data.total_cost + cost_trajectory_from_curr;
+										double cost_curr = planned_min_time_reachability_.evaluate_cost_trajectory (&state, trajectory_curr);
 
 										// Check whether the total cost through the new vertex is less than the parent
 										vertex_min = vertex_curr;
@@ -1622,9 +1627,7 @@ else {
 										intermediate_vertices_min = intermediate_vertices_curr;                   //   to properly free the memory later
 										intermediate_vertices_curr = intermediate_vertices_tmp;
 
-										cost_trajectory_from_state = cost_trajectory_from_curr;
 										cost = cost_curr;
-
 										found_path = true;
 									 }
 								 }
@@ -1638,8 +1641,12 @@ else {
 							// Check state is feasible
 							if(cost > -1) {
 								 // Show only collision free point
-								potMapFree.data[i*w+j] = 100;// potential_map_.data[i*w+j];
+								//potMapFree.data[i*w+j] =  cost_goal - vertex_min->data.total_cost + cost;
+								// Use formula in the thesis to create cost-to-go
+								nav_cost[i*w+j] =  cost_goal - vertex_min->data.total_cost + cost;
 
+								if(nav_cost[i*w+j] > max_cost)
+									max_cost = nav_cost[i*w+j];
 
 								// Publish trajectory from that
 								visualization_msgs::Marker traj_marker;
@@ -1679,8 +1686,22 @@ else {
 					} // End POT_HIGH region
 				} // End loop column
 			} // End loop row
+
+			// Scale it to int 0 -> 100
+			for(std::vector<float>::size_type i = 0; i != nav_cost.size(); i++){
+				if(nav_cost[i] >= 0){
+					float scale;
+					scale = (nav_cost[i]/max_cost)*100.0;
+					potMapFree.data[i] = (static_cast<int8_t>(scale));
+				}else{
+					potMapFree.data[i] = -1;
+				}
+			}
+
 		}
 	}
+
+
 	if(last_funnel_size_ > funnelCount){
 		for(int i = funnelCount; i < last_funnel_size_; i++){
 			visualization_msgs::Marker traj_marker;
